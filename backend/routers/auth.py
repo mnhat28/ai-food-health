@@ -98,7 +98,7 @@ async def get_current_user(
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Token không hợp lệ hoặc đã hết hạn",
+        detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -123,23 +123,23 @@ async def get_current_user(
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
-    # Kiểm tra email đã tồn tại chưa
+    # Check if email already exists
     result = await db.execute(select(User).where(User.email == payload.email))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email đã được sử dụng",
+            detail="Email is already in use",
         )
 
-    # Kiểm tra username đã tồn tại chưa
+    # Check if username already exists
     result = await db.execute(select(User).where(User.username == payload.username))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username đã được sử dụng",
+            detail="Username is already in use",
         )
 
-    # Tạo user mới
+    # Create new user
     user = User(
         email=payload.email,
         username=payload.username,
@@ -149,7 +149,7 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
-    # Tạo token
+    # Create token
     access_token = create_access_token({"sub": user.id})
 
     return TokenResponse(
@@ -167,13 +167,13 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email hoặc mật khẩu không đúng",
+            detail="Invalid email or password",
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tài khoản đã bị khóa",
+            detail="Account has been locked",
         )
 
     access_token = create_access_token({"sub": user.id})
@@ -199,7 +199,7 @@ async def update_profile(
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(current_user, field, value)
 
-    # Tự động tính calorie_goal từ TDEE nếu chưa có
+    # Automatically calculate calorie_goal from TDEE if not set
     if not current_user.calorie_goal and current_user.tdee:
         current_user.calorie_goal = current_user.tdee
 
@@ -209,7 +209,7 @@ async def update_profile(
 
 @router.post("/logout")
 async def logout():
-    return {"message": "Đăng xuất thành công"}
+    return {"message": "Logout successful"}
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

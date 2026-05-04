@@ -14,7 +14,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AI Food Health API",
-    description="API nhận diện món ăn, ước lượng calo và đưa lời khuyên dinh dưỡng",
+    description="API for food recognition, calorie estimation, and nutrition advice",
     version="1.0.0",
     lifespan=lifespan,
 )

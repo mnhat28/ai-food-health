@@ -12,34 +12,34 @@ class FoodLog(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
 
-    # Thông tin món ăn
-    food_name = Column(String, nullable=False)           # tên món ăn (từ ML model)
-    food_name_en = Column(String, nullable=True)         # tên tiếng Anh
-    image_url = Column(String, nullable=True)            # URL ảnh trên Cloudinary
-    confidence = Column(Float, nullable=True)            # độ tin cậy của ML model (0-1)
+    # Food information
+    food_name = Column(String, nullable=False)           # food name (from ML model)
+    food_name_en = Column(String, nullable=True)         # English name
+    image_url = Column(String, nullable=True)            # image URL on Cloudinary
+    confidence = Column(Float, nullable=True)            # ML model confidence (0-1)
 
-    # Dinh dưỡng (trên 100g)
+    # Nutrition (per 100g)
     calories = Column(Float, nullable=False)             # kcal
-    protein = Column(Float, nullable=True)               # gram
-    carbohydrates = Column(Float, nullable=True)         # gram
-    fat = Column(Float, nullable=True)                   # gram
-    fiber = Column(Float, nullable=True)                 # gram
-    sugar = Column(Float, nullable=True)                 # gram
+    protein = Column(Float, nullable=True)               # grams
+    carbohydrates = Column(Float, nullable=True)         # grams
+    fat = Column(Float, nullable=True)                   # grams
+    fiber = Column(Float, nullable=True)                 # grams
+    sugar = Column(Float, nullable=True)                 # grams
     sodium = Column(Float, nullable=True)                # mg
 
-    # Khẩu phần
-    serving_size = Column(Float, default=100.0)          # gram
-    serving_unit = Column(String, default="g")           # g / ml / phần
+    # Serving size
+    serving_size = Column(Float, default=100.0)          # grams
+    serving_unit = Column(String, default="g")           # g / ml / portion
 
-    # Bữa ăn
+    # Meal
     meal_type = Column(String, nullable=False)           # breakfast/lunch/dinner/snack
     eaten_at = Column(DateTime(timezone=True), nullable=False)
 
-    # Dữ liệu thô từ ML và USDA (lưu để debug)
-    ml_raw = Column(JSON, nullable=True)                 # top 5 predictions từ model
-    usda_raw = Column(JSON, nullable=True)               # response từ USDA API
+    # Raw data from ML and USDA (stored for debugging)
+    ml_raw = Column(JSON, nullable=True)                 # top 5 predictions from model
+    usda_raw = Column(JSON, nullable=True)               # response from USDA API
 
-    # Ghi chú của user
+    # User note
     note = Column(String, nullable=True)
 
     # Timestamps
@@ -54,7 +54,7 @@ class FoodLog(Base):
 
     @property
     def total_calories(self):
-        """Tính calo thực tế theo khẩu phần ăn"""
+        """Calculate actual calories based on serving size"""
         if self.calories and self.serving_size:
             return round(self.calories * self.serving_size / 100, 1)
         return self.calories
@@ -79,7 +79,7 @@ class FoodLog(Base):
 
     @property
     def nutrition_summary(self):
-        """Tóm tắt dinh dưỡng theo khẩu phần thực tế"""
+        """Nutrition summary based on actual serving size"""
         return {
             "food_name": self.food_name,
             "serving_size": self.serving_size,
