@@ -1,0 +1,189 @@
+AI FOOD HEALTH — ML NOTE
+========================
+
+1. DOWNLOAD DATASET (KAGGLE)
+----------------------------
+Error:
+End-of-central-directory signature not found
+
+Cause:
+- Corrupted or incomplete zip file
+
+Fix:
+rm food-101.zip
+kaggle datasets download -d dansbecker/food-101 -p data/raw
+unzip food-101.zip
+
+----------------------------------------
+
+2. KAGGLE.JSON
+--------------
+Purpose:
+- Authenticate Kaggle API
+
+Location:
+~/.kaggle/kaggle.json
+
+Permission:
+chmod 600 ~/.kaggle/kaggle.json
+
+----------------------------------------
+
+3. CORRECT FOLDER STRUCTURE
+---------------------------
+Wrong:
+raw/food-101/food-101/images
+
+Correct:
+raw/food-101/images
+raw/food-101/meta
+
+Fix:
+mv raw/food-101/food-101/* raw/food-101/
+rm -r raw/food-101/food-101
+
+----------------------------------------
+
+4. PREPARE DATASET
+------------------
+Expected result:
+- train: ~42000 images
+- val:   ~14000 images
+
+Warning "Class not found":
+→ safe to ignore
+
+----------------------------------------
+
+5. VIETNAMESE DATASET
+---------------------
+Error:
+TypeError: NoneType not iterable (icrawler)
+
+Cause:
+- Google blocking requests
+- icrawler parser issue
+
+Conclusion:
+→ skip this step
+
+----------------------------------------
+
+6. ALBUMENTATIONS ERROR
+-----------------------
+Error:
+cannot import preserve_channel_dim
+
+Fix (requirements.txt):
+albumentations==1.4.8
+albucore==0.0.17
+
+----------------------------------------
+
+7. CUDA OUT OF MEMORY
+---------------------
+Error:
+CUDA out of memory
+
+Fix:
+Reduce batch_size:
+32 → 16 → 8
+
+----------------------------------------
+
+8. BATCH
+--------
+Batch = number of images processed at once
+
+Large batch:
+- faster
+- uses more VRAM
+
+Small batch:
+- slower
+- uses less VRAM
+
+----------------------------------------
+
+9. EPOCH
+--------
+1 epoch = one full pass over the dataset
+
+Example:
+42000 images, batch 32
+→ ~1312 batches / epoch
+
+----------------------------------------
+
+10. NUMBER OF EPOCHS
+--------------------
+Recommended:
+20 – 30 epochs (for large dataset)
+
+----------------------------------------
+
+11. LOSS
+--------
+Loss = model error
+
+High loss → bad predictions
+Low loss → good predictions
+
+With 108 classes:
+initial loss ≈ log(108) ≈ 4.68
+
+----------------------------------------
+
+12. TRAIN vs VALIDATION
+-----------------------
+
+Train:
+- used for learning
+
+Validation:
+- used for evaluation
+
+----------------------------------------
+
+Overfitting:
+train loss ↓
+val loss ↑
+
+→ model memorizes data
+
+----------------------------------------
+
+Good training:
+train loss ↓
+val loss ↓
+
+→ model generalizes well
+
+----------------------------------------
+
+13. TRAINING TIME
+-----------------
+~30 minutes / epoch
+30 epochs ≈ 15 hours
+
+----------------------------------------
+
+14. CHECKLIST
+-------------
+✔ Correct dataset structure
+✔ No unzip errors
+✔ Suitable batch size for GPU
+✔ Albumentations working
+✔ Skip Vietnamese crawler
+
+----------------------------------------
+
+CONCLUSION
+----------
+If:
+- training runs successfully
+- loss is decreasing
+
+→ your project is on the right track
+
+========================

@@ -1,7 +1,92 @@
-# .gitignore
+# ==========================================
+# Environment
+# ==========================================
 .env
+.env.local
+.env.production
+venv/
+.venv/
 __pycache__/
 *.pyc
-node_modules/
-.next/
+*.pyo
+*.pyd
+.Python
+
+# ==========================================
+# Dataset — do not push
+# ==========================================
+ml/data/raw/
+ml/data/processed/
+ml/data/calorie_cache.json
+
+# ==========================================
+# ML Models — do not push (too large)
+# ==========================================
 ml/models/*.onnx
+ml/models/*.pt
+ml/models/checkpoints/
+ml/models/eval/
+
+# Keep metadata and class list
+!ml/models/model_metadata.json
+!ml/data/food_classes.json
+
+# ==========================================
+# Python
+# ==========================================
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ==========================================
+# Node / Frontend
+# ==========================================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/coverage/
+
+# ==========================================
+# Docker
+# ==========================================
+*.log
+docker-compose.override.yml
+
+# ==========================================
+# Database
+# ==========================================
+*.sqlite3
+*.db
+postgres_data/
+
+# ==========================================
+# IDE
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# Jupyter notebooks checkpoints
+# ==========================================
+ml/notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints/
+
+# ==========================================
+# Uploads / temp files
+# ==========================================
+backend/uploads/
+*.tmp
+*.temp
