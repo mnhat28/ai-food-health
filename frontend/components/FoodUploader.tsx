@@ -22,7 +22,7 @@ import toast from "react-hot-toast";
 interface PredictionResult {
   food_name: string;
   food_name_en: string;
-  confidence: float;
+  confidence: number;
   calories: number;
   protein: number | null;
   carbohydrates: number | null;
@@ -311,7 +311,7 @@ export default function FoodUploader({ onLogCreated }: FoodUploaderProps) {
       )}
 
       {/* Result */}
-      {step === "result" && result && (
+      {(step === "result" || step === "saving") && result && (
         <div className="space-y-4 animate-fade-in">
 
           {/* Food name + confidence */}

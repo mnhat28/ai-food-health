@@ -3,7 +3,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select, and_
 from datetime import datetime
 import logging
-import anthropic
+import google.generativeai as genai
 import json
 import os
 
@@ -14,7 +14,10 @@ from services.email_service import send_daily_reminder, send_weekly_report
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 
 # ==========================================
@@ -45,6 +48,9 @@ async def get_all_active_users() -> list[User]:
 
 async def generate_ai_weekly_report(user: User) -> str | None:
     try:
+        if not GEMINI_API_KEY:
+            return None
+
         async with AsyncSessionLocal() as db:
             from datetime import timedelta
             end_date = datetime.now()
@@ -81,31 +87,24 @@ async def generate_ai_weekly_report(user: User) -> str | None:
                 for d, day_logs in logs_by_date.items()
             ]
 
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=512,
-                system=(
-                    "You are a professional nutrition advisor. "
-                    "Generate a concise weekly nutrition summary in 3-4 sentences. "
-                    "Be encouraging, specific, and actionable. "
-                    "Respond in plain text without markdown formatting."
-                ),
-                messages=[{
-                    "role": "user",
-                    "content": f"""
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(
+                f"""
 User profile:
 - Calorie goal: {user.calorie_goal or 'Not set'} kcal/day
-- Age: {user.age or 'Not provided'}
-- Gender: {user.gender or 'Not provided'}
 
 Weekly food data:
 {json.dumps(weekly_data, indent=2)}
 
 Generate a short weekly nutrition summary with 1-2 specific recommendations.
-                    """.strip()
-                }],
+Respond in plain text without markdown formatting, max 4 sentences.
+                """.strip(),
+                generation_config=genai.GenerationConfig(
+                    max_output_tokens=512,
+                    temperature=0.7,
+                ),
             )
-            return message.content[0].text
+            return response.text
 
     except Exception as e:
         logger.error(f"[Scheduler] Failed to generate AI report for user {user.id}: {e}")

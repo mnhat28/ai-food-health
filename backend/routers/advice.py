@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, extract
+from sqlalchemy import select, and_
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from typing import Optional, AsyncGenerator
-import anthropic
+import google.generativeai as genai
 import json
 import os
 
@@ -14,7 +14,10 @@ from models.food_log import FoodLog
 from models.user import User
 from routers.auth import get_current_user
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 router = APIRouter()
 
@@ -25,7 +28,7 @@ router = APIRouter()
 
 class AdviceRequest(BaseModel):
     message: str
-    date_range: Optional[int] = 7           # number of days to include in context
+    date_range: Optional[int] = 7
 
 
 class AdviceResponse(BaseModel):
@@ -102,9 +105,9 @@ async def get_nutrition_context(
 
 
 def build_system_prompt(user: User) -> str:
-    profile_info = f"""
+    return f"""
 You are a professional nutrition advisor AI assistant.
-Your role is to analyze the user's eating history and provide personalized, 
+Your role is to analyze the user's eating history and provide personalized,
 actionable nutrition advice based on their goals and current habits.
 
 User Profile:
@@ -127,8 +130,7 @@ Guidelines:
 - Always encourage healthy, sustainable habits
 - If the user has not logged enough data, ask them to log more meals
 - Respond in the same language the user writes in
-    """
-    return profile_info.strip()
+    """.strip()
 
 
 def build_user_prompt(
@@ -155,7 +157,7 @@ def build_user_prompt(
                     f"({meal['calories']} kcal, {meal['serving_size']}g)"
                 )
 
-    prompt = f"""
+    return f"""
 Nutrition history for the past {len(contexts)} days:
 
 Daily Summary:
@@ -167,22 +169,41 @@ Recent meal details:
 Daily calorie goal: {user.calorie_goal or 'Not set'} kcal
 
 User question: {message}
-    """
-    return prompt.strip()
+    """.strip()
 
 
-async def stream_claude_response(
+def get_gemini_model():
+    if not GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI advice feature is not configured. Please set GEMINI_API_KEY.",
+        )
+    return genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=None,
+    )
+
+
+async def stream_gemini_response(
     system_prompt: str,
     user_prompt: str,
 ) -> AsyncGenerator[str, None]:
-    with client.messages.stream(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    ) as stream:
-        for text in stream.text_stream:
-            yield f"data: {json.dumps({'text': text})}\n\n"
+    model = get_gemini_model()
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+    response = model.generate_content(
+        full_prompt,
+        stream=True,
+        generation_config=genai.GenerationConfig(
+            max_output_tokens=1024,
+            temperature=0.7,
+        ),
+    )
+
+    for chunk in response:
+        if chunk.text:
+            yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+
     yield "data: [DONE]\n\n"
 
 
@@ -197,7 +218,6 @@ async def get_advice(
     db: AsyncSession = Depends(get_db),
 ):
     days = min(payload.date_range or 7, 30)
-
     contexts = await get_nutrition_context(current_user.id, days, db)
 
     if not any(ctx.meals for ctx in contexts):
@@ -208,16 +228,19 @@ async def get_advice(
 
     system_prompt = build_system_prompt(current_user)
     user_prompt = build_user_prompt(payload.message, contexts, current_user)
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+    model = get_gemini_model()
+    response = model.generate_content(
+        full_prompt,
+        generation_config=genai.GenerationConfig(
+            max_output_tokens=1024,
+            temperature=0.7,
+        ),
     )
 
     return AdviceResponse(
-        advice=message.content[0].text,
+        advice=response.text,
         based_on_days=days,
         generated_at=datetime.now(),
     )
@@ -230,7 +253,6 @@ async def get_advice_stream(
     db: AsyncSession = Depends(get_db),
 ):
     days = min(payload.date_range or 7, 30)
-
     contexts = await get_nutrition_context(current_user.id, days, db)
 
     if not any(ctx.meals for ctx in contexts):
@@ -243,7 +265,7 @@ async def get_advice_stream(
     user_prompt = build_user_prompt(payload.message, contexts, current_user)
 
     return StreamingResponse(
-        stream_claude_response(system_prompt, user_prompt),
+        stream_gemini_response(system_prompt, user_prompt),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -257,32 +279,37 @@ async def get_daily_tip(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if not GEMINI_API_KEY:
+        return {"tip": "Log your meals today to stay on track with your nutrition goals!"}
+
     contexts = await get_nutrition_context(current_user.id, 1, db)
     today_context = contexts[0] if contexts else None
 
     if not today_context or not today_context.meals:
         return {"tip": "Start logging your meals today to get personalized nutrition tips!"}
 
-    system_prompt = build_system_prompt(current_user)
-    user_prompt = f"""
-Based on today's meals:
+    model = get_gemini_model()
+    prompt = f"""
+You are a nutrition advisor. Based on today's meals:
 {json.dumps([m for m in today_context.meals], indent=2)}
 
 Total calories today: {today_context.total_calories} kcal
 Calorie goal: {current_user.calorie_goal or 'Not set'} kcal
 
 Give a short, encouraging daily tip (max 3 sentences) based on what the user ate today.
+Respond in plain text without markdown formatting.
     """.strip()
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=256,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.GenerationConfig(
+            max_output_tokens=256,
+            temperature=0.7,
+        ),
     )
 
     return {
-        "tip": message.content[0].text,
+        "tip": response.text,
         "date": date.today(),
         "based_on_meals": len(today_context.meals),
     }
@@ -294,17 +321,20 @@ async def get_weekly_report(
     db: AsyncSession = Depends(get_db),
 ):
     contexts = await get_nutrition_context(current_user.id, 7, db)
-
     days_with_data = [ctx for ctx in contexts if ctx.meals]
+
     if len(days_with_data) < 3:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Need at least 3 days of food logs to generate a weekly report.",
         )
 
-    system_prompt = build_system_prompt(current_user)
-    user_prompt = f"""
-Generate a weekly nutrition report based on the past 7 days of data.
+    model = get_gemini_model()
+    prompt = f"""
+You are a professional nutrition advisor. Generate a weekly nutrition report.
+
+User profile:
+- Calorie goal: {current_user.calorie_goal or 'Not set'} kcal/day
 
 Weekly data:
 {json.dumps([{
@@ -316,24 +346,25 @@ Weekly data:
     'meals_logged': len(ctx.meals),
 } for ctx in contexts], indent=2)}
 
-Calorie goal: {current_user.calorie_goal or 'Not set'} kcal/day
-
 Please provide:
 1. Overall assessment of the week
 2. Top 2 strengths in their diet
 3. Top 2 areas for improvement
 4. Specific recommendations for next week
+
+Respond in plain text without markdown formatting.
     """.strip()
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.GenerationConfig(
+            max_output_tokens=1024,
+            temperature=0.7,
+        ),
     )
 
     return {
-        "report": message.content[0].text,
+        "report": response.text,
         "week_start": str(contexts[0].date),
         "week_end": str(contexts[-1].date),
         "days_logged": len(days_with_data),

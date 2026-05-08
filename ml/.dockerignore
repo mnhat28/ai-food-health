@@ -1,0 +1,10 @@
+data/raw/
+data/processed/
+models/checkpoints/
+models/*.pt
+venv/
+__pycache__/
+*.pyc
+notebooks/
+*.zip
+*.tar.gz
